@@ -5437,9 +5437,12 @@ static int __iw_mon_setint_getnone(struct net_device *dev,
 
 	case WE_SET_MONITOR_STATE:
 		{
-			v_U32_t magic = 0;
-			struct completion cmp_var;
-			long waitRet = 0;
+			void *cookie;
+			struct hdd_request *request;
+			static const struct hdd_request_params params = {
+				.priv_size = 0,
+				.timeout_ms = MON_MODE_MSG_TIMEOUT,
+			};
 
 			mon_ctx = WLAN_HDD_GET_MONITOR_CTX_PTR(adapter);
 			if(!mon_ctx) {
@@ -5460,30 +5463,33 @@ static int __iw_mon_setint_getnone(struct net_device *dev,
 				break;
 
 			mon_ctx->state = set_value;
-			magic = MON_MODE_MSG_MAGIC;
-			init_completion(&cmp_var);
-			if (wlan_hdd_mon_postMsg(&magic, &cmp_var, mon_ctx,
-			    hdd_monPostMsgCb) != VOS_STATUS_SUCCESS) {
+			request = hdd_request_alloc(&params);
+			if (!request) {
+				hddLog(VOS_TRACE_LEVEL_ERROR, FL("Request allocation failure"));
+				ret = -ENOMEM;
+				break;
+			}
+			cookie = hdd_request_cookie(request);
+			if (wlan_hdd_mon_postMsg(cookie, mon_ctx,
+						 hdd_mon_post_msg_cb)
+				!= VOS_STATUS_SUCCESS) {
 				hddLog(LOGE, FL("failed to post MON MODE REQ"));
 				mon_ctx->state =
 					(mon_ctx->state==MON_MODE_START) ?
 					MON_MODE_STOP : MON_MODE_START;
-				magic = 0;
 				ret = -EIO;
-				break;
+			} else {
+				ret = hdd_request_wait_for_response(request);
+				if (ret){
+					hddLog(LOGE, FL("failed to wait on monitor mode completion %d"),
+							ret);
+				} else if (mon_ctx->state == MON_MODE_STOP) {
+					hddLog(LOG1, FL("Enable BMPS"));
+					hdd_enable_bmps_imps(hdd_ctx);
+					hdd_restore_roaming(hdd_ctx);
+				}
 			}
-
-			waitRet = wait_for_completion_timeout(&cmp_var,
-						MON_MODE_MSG_TIMEOUT);
-			magic = 0;
-			if (waitRet <= 0 ){
-				hddLog(LOGE, FL("failed to wait on monitor mode completion %ld"),
-				       waitRet);
-			} else if (mon_ctx->state == MON_MODE_STOP) {
-				hddLog(LOG1, FL("Enable BMPS"));
-				hdd_enable_bmps_imps(hdd_ctx);
-				hdd_restore_roaming(hdd_ctx);
-			}
+			hdd_request_put(request);
 		}
 		break;
 
