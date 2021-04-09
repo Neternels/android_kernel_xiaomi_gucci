@@ -2742,7 +2742,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
                 hddLog(VOS_TRACE_LEVEL_INFO,"Restart Sap as SAP channel is %d "
                        "and STA channel is %d", pHostapdAdapter->sessionCtx.ap.operatingChannel,
                        (int)pRoamInfo->pBssDesc->channelId);
-                if (pHddCtx->cfg_ini && pHddCtx->cfg_ini->force_scc_with_ecsa)
+                if (pHddCtx->cfg_ini->force_scc_with_ecsa)
                 {
                     hdd_schedule_ecsa_chan_change_work(pHddCtx,
                                                        pAdapter->sessionId);
@@ -2750,8 +2750,7 @@ static eHalStatus hdd_AssociationCompletionHandler( hdd_adapter_t *pAdapter, tCs
                 else
                 {
                     hdd_hostapd_stop(pHostapdAdapter->dev);
-                    if (pHddCtx->cfg_ini &&
-                        pHddCtx->cfg_ini->enable_sap_auth_offload)
+                    if (pHddCtx->cfg_ini->enable_sap_auth_offload)
                        hdd_force_scc_restart_sap(pHostapdAdapter,
                              pHddCtx, (int)pRoamInfo->pBssDesc->channelId);
                 }
@@ -4562,18 +4561,10 @@ static tANI_S32 hdd_ProcessGENIE(hdd_adapter_t *pAdapter,
         pRsnIe = gen_ie + 2 + 4;
         RSNIeLen = gen_ie_len - (2 + 4);
         // Unpack the WPA IE
-        status = dot11fUnpackIeWPA((tpAniSirGlobal) halHandle,
+        dot11fUnpackIeWPA((tpAniSirGlobal) halHandle,
                             pRsnIe,
                             RSNIeLen,
                             &dot11WPAIE);
-        if (DOT11F_FAILED(status))
-        {
-            hddLog(LOGE,
-                   FL("Parse failure in hdd_ProcessGENIE (0x%08x)"),
-                   status);
-            return -EINVAL;
-        }
-
         // Copy out the encryption and authentication types
         hddLog(LOG1, FL("%s: WPA unicast cipher suite count: %d"),
                __func__, dot11WPAIE.unicast_cipher_count );

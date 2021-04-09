@@ -8152,7 +8152,7 @@ static void hdd_get_nud_stats_cb(void *data, rsp_stats *rsp)
 {
 
     hdd_adapter_t *adapter = (hdd_adapter_t *)data;
-    hdd_context_t *hdd_ctx;
+    hdd_context_t *hdd_ctx = WLAN_HDD_GET_CTX(adapter);
     struct hdd_nud_stats_context *context;
     int status;
 
@@ -8161,14 +8161,13 @@ static void hdd_get_nud_stats_cb(void *data, rsp_stats *rsp)
     if (NULL == adapter)
         return;
 
-    if (!rsp) {
-        hddLog(LOGE, FL("data is null"));
+    status = wlan_hdd_validate_context(hdd_ctx);
+    if (0 != status) {
         return;
     }
 
-    hdd_ctx = WLAN_HDD_GET_CTX(adapter);
-    status = wlan_hdd_validate_context(hdd_ctx);
-    if (0 != status) {
+    if (!rsp) {
+        hddLog(LOGE, FL("data is null"));
         return;
     }
 
@@ -12397,16 +12396,14 @@ static int __wlan_hdd_change_station(struct wiphy *wiphy,
              */
             if (0 != params->supported_channels_len) {
                 int i = 0,j = 0,k = 0, no_of_channels = 0 ;
-                for ( i = 0 ; i < params->supported_channels_len
-                      && j < SIR_MAC_MAX_SUPP_CHANNELS; i+=2)
+                for ( i = 0 ; i < params->supported_channels_len ; i+=2)
                 {
                     int wifi_chan_index;
                     StaParams.supported_channels[j] = params->supported_channels[i];
                     wifi_chan_index =
                         ((StaParams.supported_channels[j] <= HDD_CHANNEL_14 ) ? 1 : 4 );
                     no_of_channels = params->supported_channels[i+1];
-                    for(k=1; k <= no_of_channels
-                        && j < SIR_MAC_MAX_SUPP_CHANNELS - 1; k++)
+                    for(k=1; k <= no_of_channels; k++)
                     {
                         StaParams.supported_channels[j+1] =
                               StaParams.supported_channels[j] + wifi_chan_index;
@@ -13562,8 +13559,7 @@ wlan_hdd_cfg80211_inform_bss_frame( hdd_adapter_t *pAdapter,
     struct ieee80211_channel *chan;
     struct ieee80211_mgmt *mgmt = NULL;
     struct cfg80211_bss *bss_status = NULL;
-    size_t frame_len = ie_length + offsetof(struct ieee80211_mgmt,
-                                            u.probe_resp.variable);
+    size_t frame_len = sizeof (struct ieee80211_mgmt) + ie_length;
     int rssi = 0;
     hdd_context_t *pHddCtx;
     int status;
@@ -13579,7 +13575,7 @@ wlan_hdd_cfg80211_inform_bss_frame( hdd_adapter_t *pAdapter,
         return NULL;
     }
 
-    mgmt = kzalloc(frame_len, GFP_KERNEL);
+    mgmt = kzalloc((sizeof (struct ieee80211_mgmt) + ie_length), GFP_KERNEL);
     if (!mgmt)
     {
         VOS_TRACE( VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
@@ -16650,7 +16646,6 @@ static int wlan_hdd_cfg80211_set_privacy_ibss(
                                          )
 {
     int status = 0;
-    tANI_U32 ret;
     hdd_wext_state_t *pWextState = WLAN_HDD_GET_WEXT_STATE_PTR(pAdapter);
     eCsrEncryptionType encryptionType = eCSR_ENCRYPT_TYPE_NONE;
     hdd_station_ctx_t *pHddStaCtx = WLAN_HDD_GET_STATION_CTX_PTR(pAdapter);
@@ -16680,27 +16675,12 @@ static int wlan_hdd_cfg80211_set_privacy_ibss(
             if ( NULL != ie )
             {
                 pWextState->wpaVersion = IW_AUTH_WPA_VERSION_WPA;
-                
-                if (ie[1] < DOT11F_IE_WPA_MIN_LEN ||
-                    ie[1] > DOT11F_IE_WPA_MAX_LEN) {
-                    hddLog(LOGE, FL("invalid ie len:%d"), ie[1]);
-                    return -EINVAL;
-                }
-                
                 // Unpack the WPA IE
                 //Skip past the EID byte and length byte - and four byte WiFi OUI
-                ret = dot11fUnpackIeWPA((tpAniSirGlobal) halHandle,
+                dot11fUnpackIeWPA((tpAniSirGlobal) halHandle,
                                 &ie[2+4],
                                 ie[1] - 4,
                                 &dot11WPAIE);
-                if (DOT11F_FAILED(ret))
-                {
-                    hddLog(LOGE,
-                           FL("unpack failed status:(0x%08x)"),
-                           ret);
-                    return -EINVAL;
-                }
-
                 /*Extract the multicast cipher, the encType for unicast
                                cipher for wpa-none is none*/
                 encryptionType =
@@ -19308,7 +19288,6 @@ static int __wlan_hdd_cfg80211_tdls_mgmt(struct wiphy *wiphy,
     if (!pHddTdlsCtx) {
         VOS_TRACE(VOS_MODULE_ID_HDD, VOS_TRACE_LEVEL_ERROR,
                   "%s: pHddTdlsCtx not valid.", __func__);
-        return -EINVAL;
     }
 
     if (eTDLS_SUPPORT_NOT_ENABLED == pHddCtx->tdls_mode)
